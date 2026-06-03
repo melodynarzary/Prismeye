@@ -2,7 +2,7 @@ import { Box } from '@mui/material';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 
-export default function DashboardLayout({ children }) {
+export function DashboardLayout({ children }) {
   return (
     <Box sx={{
       display: 'flex',
@@ -33,3 +33,5 @@ export default function DashboardLayout({ children }) {
     </Box>
   );
 }
+
+export default DashboardLayout;

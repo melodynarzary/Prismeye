@@ -7,7 +7,7 @@ const commandInjectionRules = [
   },
   {
     id: 'CMD002',
-    pattern: /\|\s*(ls|dir|cat|type|pwd|whoami)/i,
+    pattern: /\|+\s*(ls|dir|cat|type|pwd|whoami|id|uname)/i,
     description: 'Command injection using pipe operator',
     severity: 'high'
   },
@@ -25,13 +25,13 @@ const commandInjectionRules = [
   },
   {
     id: 'CMD005',
-    pattern: /&&\s*(ls|dir|cat|type|rm|del)/i,
+    pattern: /&&\s*(ls|dir|cat|type|rm|del|whoami|id)/i,
     description: 'Command chaining using AND operator',
     severity: 'high'
   },
   {
     id: 'CMD006',
-    pattern: /\|\|\s*(ls|dir|cat|type)/i,
+    pattern: /\|\|\s*(ls|dir|cat|type|whoami|id)/i,
     description: 'Command injection using OR operator',
     severity: 'high'
   },
@@ -61,7 +61,7 @@ const commandInjectionRules = [
   },
   {
     id: 'CMD011',
-    pattern: /\bsh\b|\bbash\b|\bcmd\.exe\b/i,
+    pattern: /[;|&`'"\s](sh|bash)\b|cmd\.exe/i,
     description: 'Direct shell execution attempt',
     severity: 'high'
   },
@@ -70,6 +70,18 @@ const commandInjectionRules = [
     pattern: />\s*\/dev\/null|>\s*nul/i,
     description: 'Output redirection to hide command results',
     severity: 'low'
+  },
+  {
+    id: 'CMD013',
+    pattern: /[;|&`$]\s*(whoami|uname|hostname|ifconfig|ipconfig)\b/i,
+    description: 'System information gathering command detected',
+    severity: 'high'
+  },
+  {
+    id: 'CMD014',
+    pattern: /[;|&`$]\s*(ls|dir|pwd|cat|type)\b/i,
+    description: 'File system enumeration command detected',
+    severity: 'medium'
   }
 ];
 

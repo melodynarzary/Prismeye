@@ -37,7 +37,7 @@ const sqlInjectionRules = [
   },
   {
     id: 'SQL007',
-    pattern: /(--|\#|\/\*)/,
+    pattern: /(\s--\s|\s#\s|\/\*.*\*\/)/,
     description: 'SQL comment-based injection detected',
     severity: 'medium'
   },
@@ -67,8 +67,8 @@ const sqlInjectionRules = [
   },
   {
     id: 'SQL012',
-    pattern: /%27|%22|%60/i,
-    description: 'URL-encoded SQL injection characters',
+    pattern: /(%27|%22)\s*(%20)*(OR|AND)(%20|\+)/i,
+    description: 'URL-encoded SQL injection attempt with logical operators',
     severity: 'medium'
   },
   {

@@ -6,6 +6,7 @@ const pathTraversalRules = require('./pathTraversal');
 const localFileInclusionRules = require('./localFileInclusion');
 const xxeRules = require('./xxe');
 const nosqlInjectionRules = require('./nosqlInjection');
+const crlfRules = require('./crlf');
 
 module.exports = {
   sqlInjectionRules,
@@ -15,5 +16,6 @@ module.exports = {
   pathTraversalRules,
   localFileInclusionRules,
   xxeRules,
-  nosqlInjectionRules
+  nosqlInjectionRules,
+  crlfRules
 };

@@ -19,8 +19,8 @@ const xssRules = [
   },
   {
     id: 'XSS004',
-    pattern: /on\w+\s*=/i,
-    description: 'HTML event handler injection (onclick, onload)',
+    pattern: /\bon(click|load|error|mouseover|focus|blur|submit|input|change|keydown|keyup|mouseenter|mouseleave|dblclick|contextmenu|pointerdown|touchstart)\s*=/i,
+    description: 'HTML event handler injection detected',
     severity: 'high'
   },
   {

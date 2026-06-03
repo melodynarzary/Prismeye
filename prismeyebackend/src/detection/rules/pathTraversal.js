@@ -1,64 +1,69 @@
-const pathTraversalRules = [
+const localFileInclusionRules = [
+
   {
-    id: 'PATH001',
-    pattern: /\.\.\//,
-    description: 'Directory traversal using ../ sequence',
+    id: 'PT001',
+    pattern: /php:\/\/filter/i,
+    description: 'PHP filter wrapper exploitation attempt',
     severity: 'high'
   },
   {
-    id: 'PATH002',
-    pattern: /\.\.%2F|\.\.%5C/i,
-    description: 'URL-encoded directory traversal attempt',
+    id: 'PT002',
+    pattern: /php:\/\/input/i,
+    description: 'PHP input stream wrapper detected',
     severity: 'high'
   },
   {
-    id: 'PATH003',
-    pattern: /%2e%2e%2f|%2e%2e%5c/i,
-    description: 'Double URL-encoded path traversal',
+    id: 'PT003',
+    pattern: /expect:\/\//i,
+    description: 'Expect wrapper for command execution',
     severity: 'high'
   },
   {
-    id: 'PATH004',
-    pattern: /\.\.\\/,
-    description: 'Windows-style directory traversal detected',
+    id: 'PT004',
+    pattern: /data:\/\/|data:text/i,
+    description: 'Data URI wrapper exploitation detected',
     severity: 'high'
   },
   {
-    id: 'PATH005',
-    pattern: /\/etc\/passwd|\/etc\/shadow/i,
-    description: 'Attempt to access Unix password files',
-    severity: 'high'
-  },
-  {
-    id: 'PATH006',
-    pattern: /C:\\Windows\\System32|C:\\boot\.ini/i,
-    description: 'Attempt to access Windows system files',
-    severity: 'high'
-  },
-  {
-    id: 'PATH007',
-    pattern: /\.\.;|\.\.%3B/i,
-    description: 'Path traversal using semicolon bypass',
+    id: 'PT009',
+    pattern: /phar:\/\//i,
+    description: 'PHAR archive wrapper detected',
     severity: 'medium'
   },
   {
-    id: 'PATH008',
-    pattern: /\.\/%2e\./,
-    description: 'Mixed encoding path traversal technique',
-    severity: 'medium'
+    id: 'PT010',
+    pattern: /zip:\/\//i,
+    description: 'ZIP wrapper for file inclusion',
+    severity: 'low'
   },
+
   {
-    id: 'PATH009',
-    pattern: /\.\.\/\.\.\/\.\.\//,
-    description: 'Deep directory traversal attempt',
+    id: 'PT005',
+    pattern: /file:\/\/\/etc\/passwd/i,
+    description: 'File protocol used to access system files',
     severity: 'high'
   },
   {
-    id: 'PATH010',
-    pattern: /\0|%00/,
-    description: 'Null byte injection in file path',
+    id: 'PT006',
+    pattern: /\/proc\/self\/environ/i,
+    description: 'Attempt to access process environment variables',
+    severity: 'high'
+  },
+
+  {
+    id: 'PT007',
+    pattern: /\/var\/log\//i,
+    description: 'Attempt to include server log files',
+    severity: 'medium'
+  },
+
+  {
+    id: 'PT008',
+    pattern: /(\.\.\/)+(etc|var|usr|proc)/i,
+    description: 'Relative path to sensitive system directories',
     severity: 'high'
   }
+
 ];
 
-module.exports = pathTraversalRules;
+module.exports = localFileInclusionRules;

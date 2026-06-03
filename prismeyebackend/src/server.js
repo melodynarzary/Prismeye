@@ -1,131 +1,177 @@
-const express = require('express');
-const cors = require('cors');
+const express    = require('express');
+const cors       = require('cors');
+const http       = require('http');
+const { Server } = require('socket.io');
+const fs         = require('fs');
+const path       = require('path');
+const os         = require('os');
+const { spawn }  = require('child_process');
+const { createProxyMiddleware } = require('http-proxy-middleware');
 require('dotenv').config();
 
+const connectDB       = require('./db/connection');
 const detectionEngine = require('./detection/detectionEngine');
+const NormalLog       = require('./db/normalLog');
 
-const app = express();
+const app    = express();
+const server = http.createServer(app);
+const io     = new Server(server, {
+  cors: { origin: 'http://localhost:3000', methods: ['GET', 'POST'] },
+});
 
-// Middleware
+connectDB();
+detectionEngine.setIO(io);
+
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// Detection Middleware (MONITORING MODE - NO BLOCKING)
-app.use((req, res, next) => {
+const SERVER_NAME = process.env.SERVER_NAME || os.hostname();
+const TARGET_URL  = process.env.TARGET_URL  || null;
+
+// ── Auto-start Python ML service ──────────────────────────
+function startPythonService() {
+  const pythonScript = path.join(__dirname, '../ml/ddos_service.py');
+
+  if (!fs.existsSync(pythonScript)) {
+    console.warn('⚠️  ML script not found at:', pythonScript);
+    return;
+  }
+
+
+  const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+
+  const pyProcess = spawn(pythonCmd, [pythonScript], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    detached: false,
+  });
+
+  pyProcess.stdout.on('data', (data) => {
+    console.log(`[ML] ${data.toString().trim()}`);
+  });
+
+  pyProcess.stderr.on('data', (data) => {
+    const msg = data.toString().trim();
+    if (msg) console.warn(`[ML] ${msg}`);
+  });
+
+  pyProcess.on('close', (code) => {
+    console.warn(`⚠️  ML service exited with code ${code}. Restarting in 5s...`);
+    setTimeout(startPythonService, 5000);
+  });
+
+  pyProcess.on('error', (err) => {
+    console.error('❌ Failed to start ML service:', err.message);
+    console.warn('Make sure Python is installed and accessible.');
+  });
+
+  console.log('🐍 ML service starting...');
+  return pyProcess;
+}
+
+startPythonService();
+// ──────────────────────────────────────────────────────────
+
+const SKIP_ROUTES = [
+  '/api/threats',
+  '/api/normal',
+  '/api/ddos',
+  '/api/flows',
+  '/api/server',
+  '/api/auth',
+];
+
+// detection middleware
+app.use(async (req, res, next) => {
+  if (req.originalUrl.startsWith('/socket.io') || req.originalUrl === '/') return next();
+  if (SKIP_ROUTES.some(r => req.originalUrl.startsWith(r))) return next();
+
   const request = {
-    ip: req.ip,
-    url: req.url,
-    body: req.body,
-    headers: req.headers,
-    method: req.method
+    ip:          req.ip,
+    url:         req.originalUrl,
+    query:       req.query,
+    body:        req.body,
+    headers:     req.headers,
+    method:      req.method,
+    server:      SERVER_NAME,
+    application: req.headers['x-app-name'] || 'Unknown',
   };
 
-  // Run detection on every request
-  detectionEngine.detect(request);
-  
-  // Always continue - never block
+  const threats = await detectionEngine.detectAsync(request);
+
+  if (threats.length === 0) {
+    try {
+      await NormalLog.create({
+        source:     req.ip,
+        target:     req.originalUrl,
+        method:     req.method,
+        server:     SERVER_NAME,
+        statusCode: 200,
+        timestamp:  new Date(),
+      });
+      const count = await NormalLog.countDocuments();
+      io.emit('normal_count', count);
+    } catch (err) {
+      console.error('NormalLog save error:', err.message);
+    }
+  } else {
+    res.on('finish', () => {
+      detectionEngine.updateThreatStatusCodes(threats, res.statusCode);
+    });
+  }
+
   next();
 });
 
-// Routes
+// root route
 app.get('/', (req, res) => {
-  res.json({ 
-    message: 'PROXIID Detection Engine Running',
-    status: 'active',
-    mode: 'monitoring-only',
-    attackTypes: 8,
-    totalRules: 90,
-    version: '1.0.0'
+  if (TARGET_URL) return res.redirect(TARGET_URL);
+  res.json({
+    message:     'PROXIID Detection Engine Running',
+    status:      'active',
+    mode:        TARGET_URL ? 'proxy' : 'monitoring-only',
+    attackTypes: 9,
+    totalRules:  90,
+    mlDdos:      detectionEngine.ddosServiceOnline ? 'online' : 'offline',
+    version:     '2.0.0',
+    server:      SERVER_NAME,
   });
 });
 
-// Get threat statistics
-app.get('/api/threats/stats', (req, res) => {
-  const stats = detectionEngine.getStats();
-  res.json(stats);
-});
+app.use('/api/auth',    require('./routes/auth'));
+app.use('/api/threats', require('./routes/threats'));
+app.use('/api/normal',  require('./routes/normal'));
+app.use('/api/ddos',    require('./routes/ddos'));
+app.use('/api/flows',   require('./routes/flows'));
+app.use('/api/server',  require('./routes/serverMetrics'));
+app.use('/api/test',    require('./routes/test'));
 
-// Get all threats
-app.get('/api/threats', (req, res) => {
-  const threats = detectionEngine.getThreats();
-  res.json({ 
-    success: true,
-    threats, 
-    count: threats.length 
-  });
-});
+// proxy to developer's app
+if (TARGET_URL) {
+  app.use('/', createProxyMiddleware({
+    target:       TARGET_URL,
+    changeOrigin: true,
+    ws:           true,
+    on: {
+      error: (err, req, res) => {
+        console.error('Proxy error:', err.message);
+        res.status(502).json({ message: 'Target app unreachable', error: err.message });
+      },
+    },
+  }));
+  console.log(`Proxying → ${TARGET_URL}`);
+}
 
-// Get threats by severity level
-app.get('/api/threats/severity/:level', (req, res) => {
-  const { level } = req.params;
-  const threats = detectionEngine.getThreatsBySeverity(level);
-  res.json({ 
-    success: true,
-    severity: level,
-    threats, 
-    count: threats.length 
-  });
-});
-
-// Get threats by type
-app.get('/api/threats/type/:type', (req, res) => {
-  const { type } = req.params;
-  const threats = detectionEngine.getThreatsByType(type);
-  res.json({ 
-    success: true,
-    type: type,
-    threats, 
-    count: threats.length 
-  });
-});
-
-// Test endpoint
-app.post('/api/test', (req, res) => {
-  res.json({ 
-    success: true,
-    message: 'Request processed successfully',
-    received: req.body,
-    note: 'Any threats were logged but not blocked'
-  });
-});
-
-// Start server
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`\n${'='.repeat(50)}`);
-  console.log(`🚀 PROXIID DETECTION ENGINE v1.0.0`);
+  console.log(`PROXIID DETECTION ENGINE v2.0.0`);
   console.log(`${'='.repeat(50)}\n`);
-  
-  console.log(`📡 Server Information:`);
-  console.log(`   ├─ Port: ${PORT}`);
-  console.log(`   ├─ Mode: MONITORING ONLY (No Blocking)`);
-  console.log(`   ├─ Status: Active`);
-  console.log(`   └─ Logs: logs/threats.log\n`);
-  
-  console.log(`🛡️  Detection Coverage:`);
-  console.log(`   ├─ Attack Types: 8`);
-  console.log(`   ├─ Total Rules: 90`);
-  console.log(`   └─ Severity Levels: High, Medium, Low\n`);
-  
-  console.log(`📊 Attack Types Monitored:`);
-  console.log(`   ├─ SQL Injection (15 rules)`);
-  console.log(`   ├─ Cross-Site Scripting (15 rules)`);
-  console.log(`   ├─ SSRF (12 rules)`);
-  console.log(`   ├─ Command Injection (12 rules)`);
-  console.log(`   ├─ Path Traversal (10 rules)`);
-  console.log(`   ├─ Local File Inclusion (10 rules)`);
-  console.log(`   ├─ XXE (8 rules)`);
-  console.log(`   └─ NoSQL Injection (8 rules)\n`);
-  
-  console.log(`🔗 API Endpoints:`);
-  console.log(`   ├─ GET  /`);
-  console.log(`   ├─ GET  /api/threats/stats`);
-  console.log(`   ├─ GET  /api/threats`);
-  console.log(`   ├─ GET  /api/threats/severity/:level`);
-  console.log(`   ├─ GET  /api/threats/type/:type`);
-  console.log(`   └─ POST /api/test\n`);
-  
-  console.log(`${'='.repeat(50)}`);
-  console.log(`✅ Server ready! Monitoring all incoming requests...`);
+  console.log(`Port        : ${PORT}`);
+  console.log(`Server Name : ${SERVER_NAME}`);
+  console.log(`Target App  : ${TARGET_URL || 'Not set'}`);
+  console.log(`WebSocket   : Socket.io active`);
+  console.log(`Mode        : ${TARGET_URL ? 'PROXY + DETECTION' : 'MONITORING ONLY'}`);
+  console.log(`ML DDoS     : starting on port 5001...`);
   console.log(`${'='.repeat(50)}\n`);
 });

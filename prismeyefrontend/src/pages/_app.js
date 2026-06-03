@@ -1,6 +1,8 @@
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import '../styles/globals.css';
+import { AppProvider } from '../context/AppContext';
+import AlertModal from '../components/ui/AlertModal';
 
 const theme = createTheme({
   palette: {
@@ -19,6 +21,14 @@ const theme = createTheme({
     fontFamily: "'Poppins', sans-serif",
   },
   components: {
+    MuiCssBaseline: {
+      styleOverrides: {
+        body: {
+          overflowY: 'auto !important',
+          overflowX: 'hidden',
+        },
+      },
+    },
     MuiCard: {
       styleOverrides: {
         root: {
@@ -65,7 +75,10 @@ export default function App({ Component, pageProps }) {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Component {...pageProps} />
+      <AppProvider>
+        <AlertModal />
+        <Component {...pageProps} />
+      </AppProvider>
     </ThemeProvider>
   );
 }
