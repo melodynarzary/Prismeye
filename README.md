@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🔵 PrismEye
+#  PrismEye
 
 ### Real-Time Cybersecurity Tool for Detecting Cyber Attacks
 
